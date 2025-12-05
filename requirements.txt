@@ -1,0 +1,23 @@
+numpy==1.26.1
+Pillow
+huggingface_hub
+einops
+safetensors
+
+numba==0.61.2
+
+onnxruntime
+pyparsing
+importlib_metadata
+
+xformers == 0.0.24
+faiss-gpu
+pandas
+prettytable
+pytorch-lightning
+pytorch-metric-learning
+torchmetrics
+gradio==5.17.1
+trimesh
+matplotlib
+scipy
