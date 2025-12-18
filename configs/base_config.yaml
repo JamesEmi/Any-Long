@@ -7,6 +7,12 @@ Weights:
   SALAD: './weights/dino_salad.ckpt'
   DNIO: './weights/dinov2_vitb14_pretrain.pth'
 
+# optional
+Output:
+  save_dir: null              # Custom save directory (null = use timestamp-based default)
+  max_total_points: null      # Maximum points in final combined PLY (null = no limit)
+                              # Example: 5000000 for 5M points
+                              
 Model:
   chunk_size: 60
   overlap: 30
@@ -21,9 +27,9 @@ Model:
   # reference frame to alleviate the scale drift when loop closure is not available.
   # Disable it for now cuz i found some bugs related to this feature [by deng on 09 Oct].
 
-  calib: True #only mapanything;get k from kitti for input
+  calib: False # only mapanything; get k from kitti for input
   h: 376 # input h
-  w: 1241 #input w
+  w: 1241 # input w
 
 
   IRLS:
