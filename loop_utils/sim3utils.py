@@ -7,6 +7,7 @@ from numba import njit
 
 import glob
 import bisect
+import struct
 
 def accumulate_sim3_transforms(transforms):
     """
@@ -524,13 +525,15 @@ def compute_sim3_ab(S_a, S_b):
     return (s_ab, R_ab, T_ab)
 
 
-def merge_ply_files(input_dir, output_path):
+def merge_ply_files(input_dir, output_path, max_points=None):
     """
     Merge all PLY files in a directory into one file (without loading into memory)
     
     Args:
     - input_dir: Input directory containing multiple '{idx}_pcd.ply' files
     - output_path: Output file path (e.g., 'combined.ply')
+    - max_points: Optional maximum total points. If specified and total exceeds this,
+                  will downsample the merged result.
     """
 
     input_files = sorted(glob.glob(os.path.join(input_dir, '*_pcd.ply')))
@@ -583,8 +586,65 @@ def merge_ply_files(input_dir, output_path):
                         break
                     out_f.write(chunk)
     
-    print(f"Merge completed! Total points: {total_vertices}")
-    print(f"Output file: {output_path}")
+    print(f"Merge completed! Total points: {total_vertices:,}")
+
+    # Post-merge downsampling if max_points specified and exceeded
+    if max_points is not None and total_vertices > max_points:
+        print(f"[Post-processing] Downsampling from {total_vertices:,} to {max_points:,} points...")
+        _downsample_ply_inplace(output_path, total_vertices, max_points)
+    else:
+        print(f"Output file: {output_path}")
+        
+def _downsample_ply_inplace(ply_path, current_count, target_count):
+    """
+    Downsample a PLY file in-place using reservoir sampling.
+
+    Args:
+        ply_path: Path to PLY file to downsample
+        current_count: Current number of points
+        target_count: Target number of points
+    """
+
+    import tempfile
+    with open(ply_path, 'rb') as f:
+        header_size = 0
+        for line in f:
+            header_size += len(line)
+            if line.startswith(b'end_header'):
+                break
+    
+    # Each point: 3 floats (x,y,z) + 3 bytes (r,g,b) = 15 bytes
+    point_size = 15
+    # Reservoir sampling
+    selected_indices = np.random.choice(current_count, size=target_count, replace=False)
+    selected_indices = np.sort(selected_indices)  
+
+    reservoir_pts = np.zeros((target_count, 3), dtype=np.float32)
+    reservoir_clr = np.zeros((target_count, 3), dtype=np.uint8)
+
+    with open(ply_path, 'rb') as f:
+        f.seek(header_size)
+        current_idx = 0
+        reservoir_idx = 0
+
+        for target_idx in selected_indices:
+            skip_bytes = (target_idx - current_idx) * point_size
+            if skip_bytes > 0:
+                f.seek(skip_bytes, 1)
+            point_data = f.read(point_size)
+            x, y, z = struct.unpack('<fff', point_data[:12])
+            r, g, b = struct.unpack('BBB', point_data[12:15])
+            reservoir_pts[reservoir_idx] = [x, y, z]
+            reservoir_clr[reservoir_idx] = [r, g, b]
+            reservoir_idx += 1
+            current_idx = target_idx + 1
+
+    temp_path = ply_path + '.tmp'
+    save_ply(reservoir_pts, reservoir_clr, temp_path)
+    os.replace(temp_path, ply_path)
+
+    print(f"[Post-processing] Downsampled to {target_count:,} points")
+    print(f"Output file: {ply_path}")
 
 def weighted_estimate_se3(source_points, target_points, weights):
     """

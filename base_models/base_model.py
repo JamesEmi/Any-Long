@@ -266,8 +266,8 @@ class MapAnythingAdapter(Base3DModel):
         # Load weights from the URL/path specified in the config
         torch.cuda.empty_cache()
         url = self.config['Weights']['Map']
-        self.model = MapAnything.from_pretrained(url)
-        self.model.eval().to(self.device)
+        self.model = MapAnything.from_pretrained("facebook/map-anything").to(self.device)
+        self.model.eval()
 
     def infer_chunk(self, image_paths: list) -> dict:
         """
