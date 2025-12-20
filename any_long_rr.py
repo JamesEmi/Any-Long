@@ -327,6 +327,7 @@ class VGGT_Long:
     def _log_chunk_to_rerun(self, chunk_idx, chunk_data):
         """
         Log per-chunk results to Rerun (realtime mode).
+        Uses timeline-based logging
 
         Args:
             chunk_idx: Index of the chunk
@@ -337,9 +338,13 @@ class VGGT_Long:
 
         viz_config = self.config.get('Visualization', {})
         max_viz_points = viz_config.get('max_viz_points', 2_000_000)
-        camera_frustum_scale = viz_config.get('camera_frustum_scale', 0.3)
+        camera_frustum_scale = viz_config.get('camera_frustum_scale', 0.05)
+        camera_axes_scale = viz_config.get('camera_axes_scale', 0.1)
         show_camera_axes = viz_config.get('show_camera_axes', True)
         downsample_frames = viz_config.get('downsample_frames', 1)
+
+        # set timeline for this chunk (sequential time steps)
+        rr.set_time_sequence("chunk_processing", chunk_idx)
 
         # Get chunk color for cameras/frustums
         chunk_color = get_chunk_color(chunk_idx)
@@ -366,19 +371,19 @@ class VGGT_Long:
         points_viz = points[valid_mask]
         colors_viz = colors[valid_mask]
 
-        # Downsample for visualization
+        # Downsample for visualization (each chunk gets full 2M budget)
         points_viz, colors_viz = downsample_for_viz(points_viz, colors_viz, max_viz_points)
 
-        # Log point cloud with RGB colors (NOT chunk color)
+        # Log point cloud to SAME entity path (timeline separates them)
         rr.log(
-            f"world/chunk_{chunk_idx}/points",
+            "world/realtime/chunk_points",
             rr.Points3D(points_viz, colors=colors_viz, radii=0.01)
         )
 
         # Log cameras with chunk-specific color
         for frame_idx in range(0, num_frames, downsample_frames):
             c2w = extrinsics[frame_idx]
-            entity_path = f"world/chunk_{chunk_idx}/camera_{frame_idx}"
+            entity_path = f"world/realtime/cameras/camera_{frame_idx}"
 
             # Log frustum
             if intrinsics is not None:
@@ -392,7 +397,7 @@ class VGGT_Long:
 
             # Log camera axes
             if show_camera_axes:
-                log_camera_axes(entity_path + "/axes", c2w, scale=camera_frustum_scale)
+                log_camera_axes(entity_path + "/axes", c2w, scale=camera_axes_scale)
 
         print(f"[VIZ] Logged chunk {chunk_idx} to Rerun ({len(points_viz):,} points, {num_frames} cameras)")
 
@@ -400,41 +405,176 @@ class VGGT_Long:
         """
         Log alignment trajectory to Rerun (alignment mode).
 
+        Shows two stages:
+        1. Pre-alignment: Unaligned chunks with drift (timeline step 0)
+        2. Post-alignment: Globally aligned reconstruction (timeline step 1)
+        Use global downsampling to stay under max_viz_points.
+
         Args:
-            aligned_poses: List of (chunk_idx, C2W_matrix) tuples
+            aligned_poses: List of (chunk_idx, C2W_matrix) tuples for post-alignment poses
         """
         if not self.enable_viz or self.viz_mode not in ['alignment', 'all']:
             return
+        
+        viz_config = self.config.get('Visualization', {})
+        max_viz_points = viz_config.get('max_viz_points', 2_000_000)
+        camera_frustum_scale = viz_config.get('camera_frustum_scale', 0.1)
+        camera_axes_scale = viz_config.get('camera_axes_scale', 0.1)
+        show_camera_axes = viz_config.get('show_camera_axes', True)
 
-        # Extract trajectory positions
+        # stage 1a - pre-alignment (show drift)
+        rr.set_time_sequence("alignment_stage", 1)  # 0=realtime, 1=alignment, 2=loop_closure, 3=final
+
+        # Load unaligned chunk pcs (each chunk in its own coord frame)
+        all_points_pre = []
+        all_colors_pre = []
+        unaligned_cam_positions = []
+
+        for chunk_idx in range(len(aligned_poses)):
+            chunk_file = os.path.join(self.result_unaligned_dir, f"chunk_{chunk_idx}.npy")
+            if not os.path.exists(chunk_file):
+                continue
+
+            chunk_data = np.load(chunk_file, allow_pickle=True).item()
+            world_points = chunk_data['world_points'] # (N, H, W, 3)
+            images = chunk_data['images'] # (N, 3, H, W)
+            confs = chunk_data['world_points_conf'] # (N, H, W)
+            extrinsics = chunk_data['extrinsic']  # (N, 4, 4) - local C2W
+
+            # Get first camera position (origin of this chunk's coordinate frame)
+            unaligned_cam_positions.append(extrinsics[0, :3, 3])
+
+            # Reshape
+            points = world_points.reshape(-1, 3)
+            colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
+            confs_flat = confs.reshape(-1)
+
+            conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+            valid_mask = confs_flat > conf_threshold
+
+            all_points_pre.append(points[valid_mask])
+            all_colors_pre.append(colors[valid_mask])
+        
+        if len(all_points_pre) > 0:
+            # Concatenate and globally downsample
+            all_points_pre = np.concatenate(all_points_pre, axis=0)
+            all_colors_pre = np.concatenate(all_colors_pre, axis=0)
+            all_points_pre_viz, all_colors_pre_viz = downsample_for_viz(all_points_pre, all_colors_pre, max_viz_points)
+
+            # log pre-aligned pc
+            rr.log(
+                "world/alignment/unaligned_pc",
+                rr.Points3D(all_points_pre_viz, colors = all_colors_pre_viz, radii=0.01)
+            )
+
+            # log prealigned "traj" (shows drift)
+            unaligned_cam_positions = np.array(unaligned_cam_positions)
+            rr.log(
+                "world/alignment/unaligned_traj",
+                rr.LineStrips3D([unaligned_cam_positions], colors=[[255, 0, 0]])  # Red = drift
+            )
+            rr.log(
+                "world/alignment/unaligned_camera_positions",
+                rr.Points3D(unaligned_cam_positions, colors=[[255, 0, 0]] * len(unaligned_cam_positions), radii=0.05)
+            )
+
+            print(f"[VIZ] Logged PRE-alignment to Rerun ({len(all_points_pre_viz):,} points, {len(unaligned_cam_positions)} chunks)")
+        
+        # stage 1b - post-alignment
+        rr.set_time_sequence("alignment_stage", 1)
+
+        all_points_post = []
+        all_colors_post = []
+
+        for chunk_idx, c2w in aligned_poses:
+            chunk_file = os.path.join(self.result_unaligned_dir, f"chunk_{chunk_idx}.npy")
+            if not os.path.exists(chunk_file):
+                continue
+
+            chunk_data = np.load(chunk_file, allow_pickle=True).item()
+            world_points = chunk_data['world_points']
+            images = chunk_data['images']
+            confs = chunk_data['world_points_conf']
+
+            points = world_points.reshape(-1, 3)
+            colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
+            confs_flat = confs.reshape(-1)
+
+            conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+            valid_mask = confs_flat > conf_threshold
+            # transform points to world frame using aligned pose (c2w transforms chunk's local frame to world frame)
+            points_local = points[valid_mask]  # (M, 3)
+            points_world = (c2w[:3, :3] @ points_local.T).T + c2w[:3, 3]  # apply rot + trans
+
+            all_points_post.append(points_world)
+            all_colors_post.append(colors[valid_mask])
+
+        if len(all_points_post) == 0:
+            print('[VIZ] No pc found for alignment viz.')
+            return
+        
+        all_points_post = np.concatenate(all_points_post, axis=0)
+        all_colors_post = np.concatenate(all_colors_post, axis=0)
+
+        all_points_post_viz, all_colors_post_viz = downsample_for_viz(all_points_post, all_colors_post, max_viz_points)
+        rr.log(
+            "world/alignment/aligned_pointcloud",
+            rr.Points3D(all_points_post_viz, colors=all_colors_post_viz, radii=0.01)
+        )
+
+        # Extract trajectory positions for aligned cams
         positions = []
-        colors = []
+        colors_cam = []
 
         for chunk_idx, c2w in aligned_poses:
             position = c2w[:3, 3]
             positions.append(position)
-            colors.append(get_chunk_color(chunk_idx))
+            colors_cam.append(get_chunk_color(chunk_idx))
 
         positions = np.array(positions)
-        colors = np.array(colors)
+        colors_cam = np.array(colors_cam)
 
         # Log trajectory as line strip
         rr.log(
-            "world/alignment/trajectory",
-            rr.LineStrips3D([positions], colors=[colors[0]])
+            "world/alignment/aligned_traj",
+            rr.LineStrips3D([positions], colors=[[0, 255, 0]])  # Yellow trajectory
         )
 
         # Log camera positions as points
         rr.log(
-            "world/alignment/camera_positions",
-            rr.Points3D(positions, colors=colors, radii=0.05)
+            "world/alignment/aligned_camera_positions",
+            rr.Points3D(positions, colors=colors_cam, radii=0.05)
         )
 
-        print(f"[VIZ] Logged alignment trajectory to Rerun ({len(positions)} poses)")
+        for chunk_idx, c2w in aligned_poses:
+            chunk_color = get_chunk_color(chunk_idx)
+            entity_path = f"world/alignment/cameras/chunk_{chunk_idx}"
+
+            # get intrinsics
+            chunk_file = os.path.join(self.result_unaligned_dir, f"chunk_{chunk_idx}.npy")
+            if os.path.exists(chunk_file):
+                chunk_data = np.load(chunk_file, allow_pickle=True).item()
+                intrinsics = chunk_data.get('intrinsic', None)
+                if intrinsics is not None:
+                    K = intrinsics[0]
+                    height, width = chunk_data['world_points'].shape[1:3]
+
+                    log_camera_frustum(
+                        entity_path + '\frustum',
+                        c2w, K, chunk_color,
+                        width, height, 
+                        scale = camera_frustum_scale
+                    )
+                    if show_camera_axes:
+                        log_camera_axes(entity_path + "/axes", c2w, scale=camera_axes_scale)
+        
+        print(f"[VIZ] Logged alignment to Rerun ({len(all_points_post_viz):,} points globally downsampled, {len(positions)} poses)")
 
     def _log_loop_closure_to_rerun(self, optimized_poses, loop_connections):
         """
         Log loop closure connections to Rerun (final mode).
+
+        Uses timeline separation and global downsampling to stay under max_viz_points.
 
         Args:
             optimized_poses: List of optimized C2W matrices (one per chunk)
@@ -443,23 +583,108 @@ class VGGT_Long:
         if not self.enable_viz or self.viz_mode not in ['final', 'all']:
             return
 
+        viz_config = self.config.get('Visualization', {})
+        max_viz_points = viz_config.get('max_viz_points', 2_000_000)
+        camera_frustum_scale = viz_config.get('camera_frustum_scale', 0.1)
+        camera_axes_scale = viz_config.get('camera_axes_scale', 0.1)
+        show_camera_axes = viz_config.get('show_camera_axes', True)
+
+        rr.set_time_sequence("pipeline_stage", 2)  # 0=realtime, 1=alignment, 2=loop_closure, 3=final
+
+        all_points_loop = []
+        all_colors_loop = []
+
+        for chunk_idx, optimized_c2w in enumerate(optimized_poses):
+            chunk_file = os.path.join(self.result_unaligned_dir, f"chunk_{chunk_idx}.npy")
+            if not os.path.exists(chunk_file):
+                continue
+
+            chunk_data = np.load(chunk_file, allow_pickle=True).item()
+            world_points = chunk_data['world_points']  # (N, H, W, 3)
+            images = chunk_data['images']  # (N, 3, H, W)
+            confs = chunk_data['world_points_conf']  # (N, H, W)
+
+            # Reshape
+            points = world_points.reshape(-1, 3)
+            colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
+            confs_flat = confs.reshape(-1)
+
+            # Filter by confidence
+            conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+            valid_mask = confs_flat > conf_threshold
+
+            # Transform points using optimized pose
+            points_local = points[valid_mask]
+            points_world = (optimized_c2w[:3, :3] @ points_local.T).T + optimized_c2w[:3, 3]
+
+            all_points_loop.append(points_world)
+            all_colors_loop.append(colors[valid_mask])
+        
+        if len(all_points_loop) > 0:
+            # Concatenate and globally downsample
+            all_points_loop = np.concatenate(all_points_loop, axis=0)
+            all_colors_loop = np.concatenate(all_colors_loop, axis=0)
+            all_points_loop_viz, all_colors_loop_viz = downsample_for_viz(all_points_loop, all_colors_loop, max_viz_points)
+
+            # Log loop-optimized point cloud
+            rr.log(
+                "world/loop_closure/optimized_pointcloud",
+                rr.Points3D(all_points_loop_viz, colors=all_colors_loop_viz, radii=0.01)
+            )
+
         # Extract positions from optimized poses
         positions = np.array([pose[:3, 3] for pose in optimized_poses])
+
+         # optimized traj
+        rr.log(
+            "world/loop_closure/optimized_trajectory",
+            rr.LineStrips3D([positions], colors=[[0, 255, 255]])  # Cyan = loop-optimized
+        )
+
+        # camera positions
+        colors_cam = [get_chunk_color(i) for i in range(len(positions))]
+        rr.log(
+            "world/loop_closure/camera_positions",
+            rr.Points3D(positions, colors=colors_cam, radii=0.05)
+        )
 
         # Log loop closure connections as lines
         for idx_a, idx_b, _ in loop_connections:
             line = np.array([positions[idx_a], positions[idx_b]])
             rr.log(
-                f"world/loop_closures/connection_{idx_a}_{idx_b}",
-                rr.LineStrips3D([line], colors=[[0, 255, 0, 128]])  # Green with transparency
+                f"world/loop_closures/connections/loop_{idx_a}_{idx_b}",
+                rr.LineStrips3D([line], colors=[[255, 0, 255, 200]])  # Green with transparency
             )
+        
+        # Log camera frustums for optimized poses
+        for chunk_idx, optimized_c2w in enumerate(optimized_poses):
+            chunk_color = get_chunk_color(chunk_idx)
+            entity_path = f"world/loop_closure/cameras/chunk_{chunk_idx}"
 
-        print(f"[VIZ] Logged {len(loop_connections)} loop closures to Rerun")
+            chunk_file = os.path.join(self.result_unaligned_dir, f"chunk_{chunk_idx}.npy")
+            if os.path.exists(chunk_file):
+                chunk_data = np.load(chunk_file, allow_pickle=True).item()
+                intrinsics = chunk_data.get('intrinsic', None)
+                if intrinsics is not None:
+                    K = intrinsics[0]
+                    height, width = chunk_data['world_points'].shape[1:3]
+
+                    log_camera_frustum(
+                        entity_path + "/frustum",
+                        optimized_c2w, K, chunk_color,
+                        width, height,
+                        scale=camera_frustum_scale
+                    )
+
+                    if show_camera_axes:
+                        log_camera_axes(entity_path + "/axes", optimized_c2w, scale=camera_axes_scale)
+
+        print(f"[VIZ] Logged loop closure to Rerun ({len(all_points_loop_viz):,} points, {len(loop_connections)} loop connections)")
 
     def _log_final_pointcloud_to_rerun(self, ply_path):
         """
         Log final combined point cloud to Rerun (final mode).
-
+        Uses timeline separation to avoid accumulation with other stages.
         Args:
             ply_path: Path to final combined PLY file
         """
@@ -468,14 +693,11 @@ class VGGT_Long:
 
         viz_config = self.config.get('Visualization', {})
         max_viz_points = viz_config.get('max_viz_points', 2_000_000)
-
-        # Read PLY file
+        rr.set_time_sequence("pipeline_stage", 3)  # 0=realtime, 1=alignment, 2=loop_closure, 3=final
         points, colors = read_ply_points_colors(ply_path)
 
-        # Downsample for visualization
         points_viz, colors_viz = downsample_for_viz(points, colors, max_viz_points)
-
-        # Log to Rerun
+        
         rr.log(
             "world/final/combined_pointcloud",
             rr.Points3D(points_viz, colors=colors_viz, radii=0.01)

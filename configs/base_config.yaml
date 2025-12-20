@@ -12,10 +12,21 @@ Output:
   save_dir: null              # Custom save directory (null = use timestamp-based default)
   max_total_points: null      # Maximum points in final combined PLY (null = no limit)
                               # Example: 5000000 for 5M points
-                              
+
+# optional
+Visualization:
+  enable: False                    # Enable Rerun visualization
+  mode: 'all'                    # Options: 'realtime', 'alignment', 'final', 'all'
+  save_rrd: null                   # Save recording to file (e.g., 'output.rrd')
+  max_viz_points: 2000000          # Downsample final viz to 2M points
+  camera_frustum_scale: 0.05        # Frustum size in meters (reduced for less obstruction)
+  camera_axes_scale: 0.05 
+  show_camera_axes: True           # Show RGB axes for cameras
+  downsample_frames: 1             # Show every Nth frame (1 = all frames)
+
 Model:
   chunk_size: 60
-  overlap: 30
+  overlap: 3:0
   loop_chunk_size: 20 # imgs of loop chunk = 2 * loop_chunk_size
   loop_enable: True
   useDBoW: False

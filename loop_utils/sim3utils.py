@@ -569,7 +569,7 @@ def merge_ply_files(input_dir, output_path, max_points=None):
         out_f.write(b"end_header\n")
         
         for file in input_files:
-            # print(f'{idx_file}/{all_file_num}')
+            print(f'{idx_file}/{all_file_num}')
             idx_file += 1
             with open(file, 'rb') as in_f:
                 # Skip the head
