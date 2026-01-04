@@ -2,7 +2,7 @@ inherit_from: "configs/base_config.yaml"
 
 Output:
   save_dir: null              # Override with --save_dir CLI argument
-  max_total_points: 2000000     # Maximum points in final combined PLY (null = no limit)
+  # max_total_points: 2000000     # Maximum points in final combined PLY (null = no limit)
 
 Weights:
   model: 'Mapanything'  # Use MapAnything foundation model
@@ -10,14 +10,14 @@ Weights:
   Map: 'facebook/map_anything'    # Can also use 'facebook/map-anything' for HuggingFace Hub
 
 Model:
-  chunk_size: 60
-  overlap: 30
+  chunk_size: 150
+  overlap: 100
   loop_chunk_size: 20 # imgs of loop chunk = 2 * loop_chunk_size
   loop_enable: True
   useDBoW: False
   delete_temp_files: True
   align_method: 'numba' # 'numba' or 'numpy', use 'numba' would be faster
-  using_sim3: True # Using SIM(3) alignment if True, while using SE(3) alignment if False,mapanything need se3
+  using_sim3: False # Using SIM(3) alignment if True, while using SE(3) alignment if False,mapanything need se3
   reference_frame_mid: False
   # If reference_frame_mid == True, use the middle frame within the chunk as the
   # reference frame to alleviate the scale drift when loop closure is not available.
@@ -25,3 +25,7 @@ Model:
   calib: False # only mapanything; get k from kitti for input
   h: 720 # input h
   w: 1280 # input w
+
+Pointcloud_Save:
+    sample_ratio: 1.0     # Downsample ratio for final point cloud
+    conf_threshold_coef: 0.75 # Confidence threshold coefficient

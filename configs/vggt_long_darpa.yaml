@@ -1,6 +1,5 @@
 inherit_from: "configs/base_config.yaml"
 
-# optional
 Output:
   save_dir: null              # Override with --save_dir CLI argument
   max_total_points: 2000000     # Maximum points in final combined PLY (null = no limit)
