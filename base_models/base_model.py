@@ -307,11 +307,11 @@ class MapAnythingAdapter(Base3DModel):
                 self.update = False
                 print(self.k)
 
-        #k input for map anything
-        if self.k is not None:
-            for view in images:
-                if "intrinsics" not in view:
-                    view["intrinsics"] = self.k
+        # #k input for map anything
+        # if self.k is not None:
+        #     for view in images:
+        #         if "intrinsics" not in view:
+        #             view["intrinsics"] = self.k
 
         # 3. Run Inference
         torch.cuda.empty_cache()
@@ -320,17 +320,17 @@ class MapAnythingAdapter(Base3DModel):
             predictions_list = self.model.infer(
                 images,
                 memory_efficient_inference=False,  # Can be tuned based on VRAM
-                use_amp=True,
-                amp_dtype="bf16",
-                apply_mask=True,  # Generate masks for valid geometry
-                mask_edges=True,  # Remove edge artifacts using normals/depth
-                apply_confidence_mask=True,  # Filter low-confidence regions
-                confidence_percentile=10,  # Percentile threshold for confidence
-                ignore_calibration_inputs=False,
-                ignore_depth_inputs=False,
-                ignore_pose_inputs=True,  # We want the model to estimate poses
-                ignore_depth_scale_inputs=False,
-                ignore_pose_scale_inputs=True,
+                # use_amp=True,
+                # amp_dtype="bf16",
+                # apply_mask=True,  # Generate masks for valid geometry
+                # mask_edges=True,  # Remove edge artifacts using normals/depth
+                # apply_confidence_mask=True,  # Filter low-confidence regions
+                # confidence_percentile=10,  # Percentile threshold for confidence
+                # ignore_calibration_inputs=False,
+                # ignore_depth_inputs=False,
+                # ignore_pose_inputs=True,  # We want the model to estimate poses
+                # ignore_depth_scale_inputs=False,
+                # ignore_pose_scale_inputs=True,
             )
 
         # 4. Restore Order (if reordered)
