@@ -1029,14 +1029,21 @@ class VGGT_Long:
         
         print('Done.')
 
-    def run(self):
+    def run(self, subsample_freq=1):
         print(f"Loading images from {self.img_dir}...")
-        self.img_list = sorted(glob.glob(os.path.join(self.img_dir, "*.jpg")) +
+        all_images = sorted(glob.glob(os.path.join(self.img_dir, "*.jpg")) +
                                glob.glob(os.path.join(self.img_dir, "*.png")))
         # print(self.img_list)
-        if len(self.img_list) == 0:
+        if len(all_images) == 0:
             raise ValueError(f"[DIR EMPTY] No images found in {self.img_dir}!")
-        print(f"Found {len(self.img_list)} images")
+        print(f"Found {len(all_images)} images")
+
+        if subsample_freq > 1:
+            self.img_list = all_images[::subsample_freq]
+            print(f"Using every {subsample_freq}th image: ({len(self.img_list)} images)")
+        else:
+            self.img_list = all_images
+            print(f"Using all ({len(self.img_list)} images)")
 
         if self.timer and self.loop_enable:
             self.timer.end()  # End "Initialization"
@@ -1255,6 +1262,8 @@ if __name__ == '__main__':
                         help='Visualization mode: realtime (per-chunk), alignment (trajectories), final (complete), all (everything)')
     parser.add_argument('--save_rrd', type=str, default=None,
                         help='Save Rerun recording to file (e.g., output.rrd)')
+    parser.add_argument('--subsample_freq', type=int, default=1,
+                        help='Use every Nth image (e.g., 10 = every 10th image). Default: 1 (all images)')
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -1305,7 +1314,7 @@ if __name__ == '__main__':
 
     vggt_long = VGGT_Long(image_dir, save_dir, config, max_points=max_points, timer=timer,
                           enable_viz=enable_viz, viz_mode=viz_mode, save_rrd=save_rrd)
-    vggt_long.run()
+    vggt_long.run(subsample_freq=args.subsample_freq)
     if timer:
         timer.start("Cleanup")
     vggt_long.close()
