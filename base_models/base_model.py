@@ -280,6 +280,7 @@ class MapAnythingAdapter(Base3DModel):
             dict
         """
         from mapanything.utils.image import load_images
+        from mapanything.utils.geometry import depthmap_to_world_frame
 
         # 1. Handle 'reference_frame_mid' Logic
         # If enabled, moves the middle frame to the start of the list for inference,
@@ -357,15 +358,26 @@ class MapAnythingAdapter(Base3DModel):
             'mask': []
         }
 
+        
         for pred in predictions_list:
             # Extract fields. Note: pred["camera_poses"] is already C2W (OpenCV format)
-            collated['world_points'].append(pred["pts3d"])
+            # collated['world_points'].append(pred["pts3d"])
+            depthmap_torch = pred["depth_z"][0].squeeze(-1)  # (H, W)
+            intrinsics_torch = pred["intrinsics"][0]  # (3, 3)
+            camera_pose_torch = pred["camera_poses"][0]  # (4, 4)
+            pts3d_computed, valid_mask = depthmap_to_world_frame(
+                depthmap_torch, intrinsics_torch, camera_pose_torch
+            )
+            mask = pred["mask"][0].squeeze(-1)
+            mask = mask & valid_mask  # Combine with valid depth mask
+            collated['world_points'].append(pts3d_computed.unsqueeze(0)) #TODO: what is shape of pts3d_computed? of pred["pts3d"]??
             collated['extrinsic'].append(pred["camera_poses"])
             collated['world_points_conf'].append(pred["conf"])
             collated['images'].append(pred["img_no_norm"])
             collated['depth'].append(pred["depth_z"])
             collated['intrinsics'].append(pred["intrinsics"])
-            collated['mask'].append(pred["mask"])
+            collated['mask'].append(mask.unsqueeze(0))
+            # import ipdb; ipdb.set_trace()
 
         # Helper to concatenate list of tensors
         def process_tensor(key, dim=0):

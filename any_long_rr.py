@@ -356,6 +356,7 @@ class VGGT_Long:
         extrinsics = chunk_data['extrinsic']  # (N, 4, 4) C2W matrices
         intrinsics = chunk_data.get('intrinsic', None)  # (N, 3, 3) or None
 
+        # import ipdb; ipdb.set_trace()
         num_frames = world_points.shape[0]
         height, width = world_points.shape[1], world_points.shape[2]
 
@@ -363,13 +364,20 @@ class VGGT_Long:
         points = world_points.reshape(-1, 3)
         colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
         confs_flat = confs.reshape(-1)
+        
+        if self.config['Weights']['model'] == 'VGGT':
+            # Filter by confidence
+            print('Here in the VGGT conf handling branch!')
+            conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+            valid_mask = confs_flat > conf_threshold
+            points_viz = points[valid_mask]
+            colors_viz = colors[valid_mask]
+        else:
+            print('Here in the MapAnything conf handling branch!')
+            points_viz = points # conf_threshold_coef
+            colors_viz = colors
 
-        # Filter by confidence
-        conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
-        valid_mask = confs_flat > conf_threshold
-
-        points_viz = points[valid_mask]
-        colors_viz = colors[valid_mask]
+        # import ipdb; ipdb.set_trace()
 
         # Downsample for visualization (each chunk gets full 2M budget)
         points_viz, colors_viz = downsample_for_viz(points_viz, colors_viz, max_viz_points)
@@ -449,7 +457,10 @@ class VGGT_Long:
             colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
             confs_flat = confs.reshape(-1)
 
-            conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+            if self.config['Weights']['model'] == 'Mapanything':
+                    conf_threshold = -1.0
+            else:
+                conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
             valid_mask = confs_flat > conf_threshold
 
             all_points_pre.append(points[valid_mask])
@@ -500,7 +511,10 @@ class VGGT_Long:
             colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
             confs_flat = confs.reshape(-1)
 
-            conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+            if self.config['Weights']['model'] == 'Mapanything':
+                    conf_threshold = -1.0
+            else:
+                conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
             valid_mask = confs_flat > conf_threshold
             # transform points to world frame using aligned pose (c2w transforms chunk's local frame to world frame)
             points_local = points[valid_mask]  # (M, 3)
@@ -609,10 +623,13 @@ class VGGT_Long:
             colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
             confs_flat = confs.reshape(-1)
 
-            # Filter by confidence
-            conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+            if self.config['Weights']['model'] == 'Mapanything':
+                conf_threshold = -1.0
+            else:
+                # Filter by confidence
+                conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
             valid_mask = confs_flat > conf_threshold
-
+            # import ipdb; ipdb.set_trace()
             # Transform points using optimized pose
             points_local = points[valid_mask]
             points_world = (optimized_c2w[:3, :3] @ points_local.T).T + optimized_c2w[:3, 3]
@@ -813,8 +830,14 @@ class VGGT_Long:
                 mask1 = chunk_data1["mask"][-self.overlap:]
                 mask2 = chunk_data2["mask"][:self.overlap]
                 mask = mask1.squeeze() & mask2.squeeze()
-
-            conf_threshold = min(np.median(conf1), np.median(conf2)) * 0.1
+            
+            # TODO: add the condition for Mapanything here.
+            # TODO: If alignment relies so heavily on model provided confidences; 
+            # and the one via pred['conf'] for Mapanything is unreliable; what to do?
+            if self.config['Weights']['model'] == 'Mapanything':
+                conf_threshold = -1.0
+            else:
+                conf_threshold = min(np.median(conf1), np.median(conf2)) * 0.1
             s, R, t = weighted_align_point_maps(point_map1, 
                                                 conf1, 
                                                 point_map2, 
@@ -865,8 +888,11 @@ class VGGT_Long:
                 
                 point_map_a = chunk_data_a['world_points'][chunk_a_rela_begin:chunk_a_rela_end]
                 conf_a = chunk_data_a['world_points_conf'][chunk_a_rela_begin:chunk_a_rela_end]
-            
-                conf_threshold = min(np.median(conf_a), np.median(conf_loop)) * 0.1
+
+                if self.config['Weights']['model'] == 'Mapanything':
+                    conf_threshold = -1.0
+                else:
+                    conf_threshold = min(np.median(conf_a), np.median(conf_loop)) * 0.1
                 mask = None
                 if item[1]['mask'] is not None:
                     mask_loop = item[1]['mask'][:chunk_a_range[1] - chunk_a_range[0]]
@@ -895,8 +921,11 @@ class VGGT_Long:
                 
                 point_map_b = chunk_data_b['world_points'][chunk_b_rela_begin:chunk_b_rela_end]
                 conf_b = chunk_data_b['world_points_conf'][chunk_b_rela_begin:chunk_b_rela_end]
-            
-                conf_threshold = min(np.median(conf_b), np.median(conf_loop)) * 0.1
+
+                if self.config['Weights']['model'] == 'Mapanything':
+                    conf_threshold = -1.0
+                else:
+                    conf_threshold = min(np.median(conf_b), np.median(conf_loop)) * 0.1
                 mask = None
                 if item[1]['mask'] is not None:
                     mask_loop = item[1]['mask'][-chunk_b_range[1] + chunk_b_range[0]:]
@@ -995,13 +1024,16 @@ class VGGT_Long:
                 colors_first = (chunk_data_first['images'].transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
                 confs_first = chunk_data_first['world_points_conf'].reshape(-1)
                 ply_path_first = os.path.join(self.pcd_dir, f'0_pcd.ply')
+                if self.config['Weights']['model'] == 'Mapanything':
+                    conf_threshold = -1.0
+                else:
+                    conf_threshold = np.mean(confs) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef'] 
                 save_confident_pointcloud_batch(
                     points=points_first,  # shape: (H, W, 3)
                     colors=colors_first,  # shape: (H, W, 3)
                     confs=confs_first,  # shape: (H, W)
                     output_path=ply_path_first,
-                    conf_threshold=np.mean(confs_first) * self.config['Model']['Pointcloud_Save'][
-                        'conf_threshold_coef'],
+                    conf_threshold=conf_threshold,
                     sample_ratio=self.config['Model']['Pointcloud_Save']['sample_ratio']
                 )
 
@@ -1013,12 +1045,16 @@ class VGGT_Long:
             colors = (aligned_chunk_data['images'].transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
             confs = aligned_chunk_data['world_points_conf'].reshape(-1)
             ply_path = os.path.join(self.pcd_dir, f'{chunk_idx + 1}_pcd.ply')
+            if self.config['Weights']['model'] == 'Mapanything':
+                conf_threshold = -1.0
+            else:
+                conf_threshold = np.mean(confs) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
             save_confident_pointcloud_batch(
                 points=points,  # shape: (H, W, 3)
                 colors=colors,  # shape: (H, W, 3)
                 confs=confs,  # shape: (H, W)
                 output_path=ply_path,
-                conf_threshold=np.mean(confs) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef'],
+                conf_threshold=conf_threshold,
                 sample_ratio=self.config['Model']['Pointcloud_Save']['sample_ratio']
             )
 
