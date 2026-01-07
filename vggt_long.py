@@ -99,7 +99,6 @@ class VGGT_Long:
 
         self.chunk_size = self.config['Model']['chunk_size']
         self.overlap = self.config['Model']['overlap']
-        self.conf_threshold = 1.5
         self.seed = 42
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dtype = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
@@ -284,7 +283,10 @@ class VGGT_Long:
                 mask2 = chunk_data2["mask"][:self.overlap]
                 mask = mask1.squeeze() & mask2.squeeze()
 
-            conf_threshold = min(np.median(conf1), np.median(conf2)) * 0.1
+            if self.config['Model']['Pointcloud_Save'].get('use_confidence_filtering', True):
+                conf_threshold = min(np.median(conf1), np.median(conf2)) * 0.1
+            else:
+                conf_threshold = -1.0
             s, R, t = weighted_align_point_maps(point_map1, 
                                                 conf1, 
                                                 point_map2, 
@@ -318,8 +320,11 @@ class VGGT_Long:
                 
                 point_map_a = chunk_data_a['world_points'][chunk_a_rela_begin:chunk_a_rela_end]
                 conf_a = chunk_data_a['world_points_conf'][chunk_a_rela_begin:chunk_a_rela_end]
-            
-                conf_threshold = min(np.median(conf_a), np.median(conf_loop)) * 0.1
+
+                if self.config['Model']['Pointcloud_Save'].get('use_confidence_filtering', True):
+                    conf_threshold = min(np.median(conf_a), np.median(conf_loop)) * 0.1
+                else:
+                    conf_threshold = -1.0
                 mask = None
                 if item[1]['mask'] is not None:
                     mask_loop = item[1]['mask'][:chunk_a_range[1] - chunk_a_range[0]]
@@ -348,8 +353,11 @@ class VGGT_Long:
                 
                 point_map_b = chunk_data_b['world_points'][chunk_b_rela_begin:chunk_b_rela_end]
                 conf_b = chunk_data_b['world_points_conf'][chunk_b_rela_begin:chunk_b_rela_end]
-            
-                conf_threshold = min(np.median(conf_b), np.median(conf_loop)) * 0.1
+
+                if self.config['Model']['Pointcloud_Save'].get('use_confidence_filtering', True):
+                    conf_threshold = min(np.median(conf_b), np.median(conf_loop)) * 0.1
+                else:
+                    conf_threshold = -1.0
                 mask = None
                 if item[1]['mask'] is not None:
                     mask_loop = item[1]['mask'][-chunk_b_range[1] + chunk_b_range[0]:]
@@ -437,8 +445,8 @@ class VGGT_Long:
                     colors=colors_first,  # shape: (H, W, 3)
                     confs=confs_first,  # shape: (H, W)
                     output_path=ply_path_first,
-                    conf_threshold=np.mean(confs_first) * self.config['Model']['Pointcloud_Save'][
-                        'conf_threshold_coef'],
+                    conf_threshold=(np.mean(confs_first) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+                        if self.config['Model']['Pointcloud_Save'].get('use_confidence_filtering', True) else -1.0),
                     sample_ratio=self.config['Model']['Pointcloud_Save']['sample_ratio']
                 )
 
@@ -455,7 +463,8 @@ class VGGT_Long:
                 colors=colors,  # shape: (H, W, 3)
                 confs=confs,  # shape: (H, W)
                 output_path=ply_path,
-                conf_threshold=np.mean(confs) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef'],
+                conf_threshold=(np.mean(confs) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+                    if self.config['Model']['Pointcloud_Save'].get('use_confidence_filtering', True) else -1.0),
                 sample_ratio=self.config['Model']['Pointcloud_Save']['sample_ratio']
             )
 
