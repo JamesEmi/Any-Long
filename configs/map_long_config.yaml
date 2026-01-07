@@ -3,7 +3,7 @@ inherit_from: "configs/base_config.yaml"
 Weights:
   model: 'Mapanything'  # Use MapAnything foundation model
   # Map: './weights/map_anything'  # Path to MapAnything weights
-  Map: 'facebook/map_anything'    # Other options: 'facebook/map-anything-apache' or 'facebook/map-anything-v1' or 'facebook/map-anything-apache-v1'
+  Map: 'facebook/map-anything-v1'    # Other options: 'facebook/map-anything-apache' or 'facebook/map-anything-v1' or 'facebook/map-anything-apache-v1'
 
 Model:
   chunk_size: 150
@@ -22,7 +22,7 @@ Model:
   h: 720 # input h
   w: 1280 # input w
 
-Pointcloud_Save:
+  Pointcloud_Save:
     sample_ratio: 1.0     # Downsample ratio for final point cloud - TODO: Check if ok.
     conf_threshold_coef: 0.75 # Confidence threshold coefficient
-    use_confidence_filtering: false # Disable for MapAnything v2. Can set to True for v1.
+    use_conf_filter: True # Disable for MapAnything v2. Can set to True for v1.
