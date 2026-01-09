@@ -7,11 +7,11 @@ Output:
 Weights:
   model: 'Mapanything'  # Use MapAnything foundation model
   # Map: './weights/map_anything'  # Path to MapAnything weights
-  Map: 'facebook/map_anything'    # Can also use 'facebook/map-anything' for HuggingFace Hub
+  Map: 'facebook/map-anything-v1'    # Can also use 'facebook/map-anything' for HuggingFace Hub
 
 Model:
-  chunk_size: 150
-  overlap: 100
+  chunk_size: 60
+  overlap: 30
   loop_chunk_size: 20 # imgs of loop chunk = 2 * loop_chunk_size
   loop_enable: True
   useDBoW: False
@@ -29,3 +29,4 @@ Model:
 Pointcloud_Save:
     sample_ratio: 1.0     # Downsample ratio for final point cloud
     conf_threshold_coef: 0.75 # Confidence threshold coefficient
+    use_conf_filter: True # Disable for MapAnything v2. Can set to True for v1.

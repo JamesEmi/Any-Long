@@ -365,19 +365,16 @@ class VGGT_Long:
         colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
         confs_flat = confs.reshape(-1)
         
-        if self.config['Weights']['model'] == 'VGGT':
+        if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
             # Filter by confidence
-            print('Here in the VGGT conf handling branch!')
             conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
             valid_mask = confs_flat > conf_threshold
             points_viz = points[valid_mask]
             colors_viz = colors[valid_mask]
         else:
-            print('Here in the MapAnything conf handling branch!')
+            conf_threshold = -1.0
             points_viz = points # conf_threshold_coef
             colors_viz = colors
-
-        # import ipdb; ipdb.set_trace()
 
         # Downsample for visualization (each chunk gets full 2M budget)
         points_viz, colors_viz = downsample_for_viz(points_viz, colors_viz, max_viz_points)
@@ -457,10 +454,10 @@ class VGGT_Long:
             colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
             confs_flat = confs.reshape(-1)
 
-            if self.config['Weights']['model'] == 'Mapanything':
-                    conf_threshold = -1.0
-            else:
+            if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
                 conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+            else:
+                conf_threshold = -1.0
             valid_mask = confs_flat > conf_threshold
 
             all_points_pre.append(points[valid_mask])
@@ -511,10 +508,10 @@ class VGGT_Long:
             colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
             confs_flat = confs.reshape(-1)
 
-            if self.config['Weights']['model'] == 'Mapanything':
-                    conf_threshold = -1.0
-            else:
+            if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
                 conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+            else:
+                conf_threshold = -1.0    
             valid_mask = confs_flat > conf_threshold
             # transform points to world frame using aligned pose (c2w transforms chunk's local frame to world frame)
             points_local = points[valid_mask]  # (M, 3)
@@ -622,12 +619,12 @@ class VGGT_Long:
             points = world_points.reshape(-1, 3)
             colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
             confs_flat = confs.reshape(-1)
-
-            if self.config['Weights']['model'] == 'Mapanything':
-                conf_threshold = -1.0
-            else:
+                
+            if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
                 # Filter by confidence
                 conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+            else:
+                conf_threshold = -1.0
             valid_mask = confs_flat > conf_threshold
             # import ipdb; ipdb.set_trace()
             # Transform points using optimized pose
@@ -834,10 +831,10 @@ class VGGT_Long:
             # TODO: add the condition for Mapanything here.
             # TODO: If alignment relies so heavily on model provided confidences; 
             # and the one via pred['conf'] for Mapanything is unreliable; what to do?
-            if self.config['Weights']['model'] == 'Mapanything':
-                conf_threshold = -1.0
-            else:
+            if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
                 conf_threshold = min(np.median(conf1), np.median(conf2)) * 0.1
+            else:
+                conf_threshold = -1.0
             s, R, t = weighted_align_point_maps(point_map1, 
                                                 conf1, 
                                                 point_map2, 
@@ -889,10 +886,10 @@ class VGGT_Long:
                 point_map_a = chunk_data_a['world_points'][chunk_a_rela_begin:chunk_a_rela_end]
                 conf_a = chunk_data_a['world_points_conf'][chunk_a_rela_begin:chunk_a_rela_end]
 
-                if self.config['Weights']['model'] == 'Mapanything':
-                    conf_threshold = -1.0
-                else:
+                if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
                     conf_threshold = min(np.median(conf_a), np.median(conf_loop)) * 0.1
+                else:
+                    conf_threshold = -1.0
                 mask = None
                 if item[1]['mask'] is not None:
                     mask_loop = item[1]['mask'][:chunk_a_range[1] - chunk_a_range[0]]
@@ -922,10 +919,10 @@ class VGGT_Long:
                 point_map_b = chunk_data_b['world_points'][chunk_b_rela_begin:chunk_b_rela_end]
                 conf_b = chunk_data_b['world_points_conf'][chunk_b_rela_begin:chunk_b_rela_end]
 
-                if self.config['Weights']['model'] == 'Mapanything':
-                    conf_threshold = -1.0
-                else:
+                if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
                     conf_threshold = min(np.median(conf_b), np.median(conf_loop)) * 0.1
+                else:
+                    conf_threshold = -1.0
                 mask = None
                 if item[1]['mask'] is not None:
                     mask_loop = item[1]['mask'][-chunk_b_range[1] + chunk_b_range[0]:]
@@ -1024,10 +1021,10 @@ class VGGT_Long:
                 colors_first = (chunk_data_first['images'].transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
                 confs_first = chunk_data_first['world_points_conf'].reshape(-1)
                 ply_path_first = os.path.join(self.pcd_dir, f'0_pcd.ply')
-                if self.config['Weights']['model'] == 'Mapanything':
-                    conf_threshold = -1.0
+                if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
+                    conf_threshold = np.mean(confs_first) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef'] 
                 else:
-                    conf_threshold = np.mean(confs) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef'] 
+                    conf_threshold = -1.0
                 save_confident_pointcloud_batch(
                     points=points_first,  # shape: (H, W, 3)
                     colors=colors_first,  # shape: (H, W, 3)
@@ -1045,10 +1042,10 @@ class VGGT_Long:
             colors = (aligned_chunk_data['images'].transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
             confs = aligned_chunk_data['world_points_conf'].reshape(-1)
             ply_path = os.path.join(self.pcd_dir, f'{chunk_idx + 1}_pcd.ply')
-            if self.config['Weights']['model'] == 'Mapanything':
-                conf_threshold = -1.0
-            else:
+            if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
                 conf_threshold = np.mean(confs) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
+            else:
+                conf_threshold = -1.0
             save_confident_pointcloud_batch(
                 points=points,  # shape: (H, W, 3)
                 colors=colors,  # shape: (H, W, 3)
@@ -1114,18 +1111,18 @@ class VGGT_Long:
             self.timer.end()  # End "Model Loading"
 
         # Smart sample_ratio adjustment if max_points specified
-        if self.max_points is not None:
-            estimated_total_points = self._estimate_total_points()
-            if estimated_total_points > self.max_points:
-                adjustment_factor = self.max_points / estimated_total_points
-                original_sample_ratio = self.config['Model']['Pointcloud_Save']['sample_ratio']
-                adjusted_sample_ratio = original_sample_ratio * adjustment_factor
+        # if self.max_points is not None:
+        #     estimated_total_points = self._estimate_total_points()
+        #     if estimated_total_points > self.max_points:
+        #         adjustment_factor = self.max_points / estimated_total_points
+        #         original_sample_ratio = self.config['Model']['Pointcloud_Save']['sample_ratio']
+        #         adjusted_sample_ratio = original_sample_ratio * adjustment_factor
 
-                print(f"[Point Limiting] Target: {self.max_points:,} points")
-                print(f"[Point Limiting] Estimated total: {estimated_total_points:,} points")
-                print(f"[Point Limiting] Adjusting sample_ratio: {original_sample_ratio:.4f} → {adjusted_sample_ratio:.4f}")
+        #         print(f"[Point Limiting] Target: {self.max_points:,} points")
+        #         print(f"[Point Limiting] Estimated total: {estimated_total_points:,} points")
+        #         print(f"[Point Limiting] Adjusting sample_ratio: {original_sample_ratio:.4f} → {adjusted_sample_ratio:.4f}")
 
-                self.config['Model']['Pointcloud_Save']['sample_ratio'] = adjusted_sample_ratio
+        #         self.config['Model']['Pointcloud_Save']['sample_ratio'] = adjusted_sample_ratio
 
         self.process_long_sequence()
 
@@ -1290,7 +1287,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_dir', type=str, default=None,
                         help='Custom output directory (overrides timestamp-based dir)')
     parser.add_argument('--max_points', type=int, default=None,
-                        help='Maximum total points in final combined PLY (triggers smart downsampling)')
+                        help='Maximum points for Rerun visualization (does not affect PLY generation)')
     parser.add_argument('--viz', action='store_true',
                         help='Enable Rerun visualization')
     parser.add_argument('--viz_mode', type=str, default='final',
@@ -1367,10 +1364,8 @@ if __name__ == '__main__':
     input_dir = os.path.join(save_dir, f'pcd')
     print("Saving all the point clouds")
 
-    if max_points is not None:
-        merge_ply_files(input_dir, all_ply_path, max_points=max_points)
-    else:
-        merge_ply_files(input_dir, all_ply_path)
+
+    merge_ply_files(input_dir, all_ply_path)
     
     # Visualize final point cloud if enabled
     if enable_viz and RERUN_AVAILABLE and (viz_mode in ['final', 'all']):
