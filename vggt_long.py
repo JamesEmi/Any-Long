@@ -450,7 +450,7 @@ class VGGT_Long:
                 chunk_data_first = np.load(os.path.join(self.result_unaligned_dir, f"chunk_0.npy"), allow_pickle=True).item()
                 np.save(os.path.join(self.result_aligned_dir, "chunk_0.npy"), chunk_data_first)
             
-            aligned_chunk_data = np.load(os.path.join(self.result_aligned_dir, f"chunk_{chunk_idx}.npy"), allow_pickle=True).item() if chunk_idx > 0 else chunk_data_first
+            aligned_chunk_data = np.load(os.path.join(self.result_aligned_dir, f"chunk_{chunk_idx+1}.npy"), allow_pickle=True).item() if chunk_idx > 0 else chunk_data_first
             
             points = aligned_chunk_data['world_points'].reshape(-1, 3)
             colors = (aligned_chunk_data['images'].transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)

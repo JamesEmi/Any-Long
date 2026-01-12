@@ -43,7 +43,7 @@ grc_utils.get_type = _safe_get_type
 # Runtime / config
 # -------------------------------------------------------------------------
 device = "cuda" if torch.cuda.is_available() else "cpu"
-DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "configs", "base_config.yaml")
+DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "configs", "map_long_darpa.yaml")
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
