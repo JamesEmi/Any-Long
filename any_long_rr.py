@@ -1035,7 +1035,7 @@ class VGGT_Long:
                 )
 
 
-            aligned_chunk_data = np.load(os.path.join(self.result_aligned_dir, f"chunk_{chunk_idx}.npy"),
+            aligned_chunk_data = np.load(os.path.join(self.result_aligned_dir, f"chunk_{chunk_idx+1}.npy"),
                                              allow_pickle=True).item() if chunk_idx > 0 else chunk_data_first
 
             points = aligned_chunk_data['world_points'].reshape(-1, 3)
