@@ -355,6 +355,7 @@ class VGGT_Long:
         confs = chunk_data['world_points_conf']  # (N, H, W)
         extrinsics = chunk_data['extrinsic']  # (N, 4, 4) C2W matrices
         intrinsics = chunk_data.get('intrinsic', None)  # (N, 3, 3) or None
+        mask = chunk_data.get('mask', None)
 
         # import ipdb; ipdb.set_trace()
         num_frames = world_points.shape[0]
@@ -368,13 +369,17 @@ class VGGT_Long:
         if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
             # Filter by confidence
             conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
-            valid_mask = confs_flat > conf_threshold
-            points_viz = points[valid_mask]
-            colors_viz = colors[valid_mask]
+            # valid_mask = confs_flat > conf_threshold
+            # points_viz = points[valid_mask]
+            # colors_viz = colors[valid_mask]
+            masks_flat = mask.reshape(-1).astype(bool)
+            points_viz = points[masks_flat] # conf_threshold_coef
+            colors_viz = colors[masks_flat]
         else:
             conf_threshold = -1.0
-            points_viz = points # conf_threshold_coef
-            colors_viz = colors
+            masks_flat = mask.reshape(-1).astype(bool)
+            points_viz = points[masks_flat] # conf_threshold_coef
+            colors_viz = colors[masks_flat]
 
         # Downsample for visualization (each chunk gets full 2M budget)
         points_viz, colors_viz = downsample_for_viz(points_viz, colors_viz, max_viz_points)
@@ -445,7 +450,8 @@ class VGGT_Long:
             images = chunk_data['images'] # (N, 3, H, W)
             confs = chunk_data['world_points_conf'] # (N, H, W)
             extrinsics = chunk_data['extrinsic']  # (N, 4, 4) - local C2W
-
+            mask = chunk_data.get('mask', None)
+            
             # Get first camera position (origin of this chunk's coordinate frame)
             unaligned_cam_positions.append(extrinsics[0, :3, 3])
 
@@ -458,11 +464,14 @@ class VGGT_Long:
                 conf_threshold = np.mean(confs_flat) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
             else:
                 conf_threshold = -1.0
-            valid_mask = confs_flat > conf_threshold
+            # valid_mask = confs_flat > conf_threshold
 
-            all_points_pre.append(points[valid_mask])
-            all_colors_pre.append(colors[valid_mask])
-        
+            # all_points_pre.append(points[valid_mask])
+            # all_colors_pre.append(colors[valid_mask])
+            masks_flat = mask.reshape(-1).astype(bool)
+            all_points_pre.append(points[masks_flat]) # conf_threshold_coef
+            all_colors_pre.append(colors[masks_flat])
+
         if len(all_points_pre) > 0:
             # Concatenate and globally downsample
             all_points_pre = np.concatenate(all_points_pre, axis=0)
@@ -503,6 +512,7 @@ class VGGT_Long:
             world_points = chunk_data['world_points']
             images = chunk_data['images']
             confs = chunk_data['world_points_conf']
+            mask = chunk_data.get('mask', None)
 
             points = world_points.reshape(-1, 3)
             colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
@@ -514,11 +524,13 @@ class VGGT_Long:
                 conf_threshold = -1.0    
             valid_mask = confs_flat > conf_threshold
             # transform points to world frame using aligned pose (c2w transforms chunk's local frame to world frame)
-            points_local = points[valid_mask]  # (M, 3)
+            # points_local = points[valid_mask]  # (M, 3)
+            mask_flat = mask.reshape(-1).astype(bool)
+            points_local = points[mask_flat] #TODO: Check shapes here.
             points_world = (c2w[:3, :3] @ points_local.T).T + c2w[:3, 3]  # apply rot + trans
 
             all_points_post.append(points_world)
-            all_colors_post.append(colors[valid_mask])
+            all_colors_post.append(colors[mask_flat])
 
         if len(all_points_post) == 0:
             print('[VIZ] No pc found for alignment viz.')
@@ -619,6 +631,7 @@ class VGGT_Long:
             points = world_points.reshape(-1, 3)
             colors = (images.transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
             confs_flat = confs.reshape(-1)
+            mask = chunk_data.get('mask', None)
                 
             if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
                 # Filter by confidence
@@ -628,11 +641,12 @@ class VGGT_Long:
             valid_mask = confs_flat > conf_threshold
             # import ipdb; ipdb.set_trace()
             # Transform points using optimized pose
-            points_local = points[valid_mask]
+            mask_flat = mask.reshape(-1).astype(bool)
+            points_local = points[mask_flat]
             points_world = (optimized_c2w[:3, :3] @ points_local.T).T + optimized_c2w[:3, 3]
 
             all_points_loop.append(points_world)
-            all_colors_loop.append(colors[valid_mask])
+            all_colors_loop.append(colors[mask_flat])
         
         if len(all_points_loop) > 0:
             # Concatenate and globally downsample
@@ -1020,6 +1034,8 @@ class VGGT_Long:
                 points_first = chunk_data_first['world_points'].reshape(-1, 3)
                 colors_first = (chunk_data_first['images'].transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
                 confs_first = chunk_data_first['world_points_conf'].reshape(-1)
+                mask_first = chunk_data_first.get('mask', None)
+                mask_first_flat = mask_first.reshape(-1).astype(bool) if mask_first is not None else None
                 ply_path_first = os.path.join(self.pcd_dir, f'0_pcd.ply')
                 if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
                     conf_threshold = np.mean(confs_first) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef'] 
@@ -1031,7 +1047,8 @@ class VGGT_Long:
                     confs=confs_first,  # shape: (H, W)
                     output_path=ply_path_first,
                     conf_threshold=conf_threshold,
-                    sample_ratio=self.config['Model']['Pointcloud_Save']['sample_ratio']
+                    sample_ratio=self.config['Model']['Pointcloud_Save']['sample_ratio'],
+                    mask=mask_first_flat
                 )
 
 
@@ -1041,6 +1058,8 @@ class VGGT_Long:
             points = aligned_chunk_data['world_points'].reshape(-1, 3)
             colors = (aligned_chunk_data['images'].transpose(0, 2, 3, 1).reshape(-1, 3) * 255).astype(np.uint8)
             confs = aligned_chunk_data['world_points_conf'].reshape(-1)
+            mask_aligned = aligned_chunk_data.get('mask', None)
+            mask_aligned_flat = mask_aligned.reshape(-1).astype(bool) if mask_aligned is not None else None
             ply_path = os.path.join(self.pcd_dir, f'{chunk_idx + 1}_pcd.ply')
             if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True):
                 conf_threshold = np.mean(confs) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
@@ -1052,7 +1071,8 @@ class VGGT_Long:
                 confs=confs,  # shape: (H, W)
                 output_path=ply_path,
                 conf_threshold=conf_threshold,
-                sample_ratio=self.config['Model']['Pointcloud_Save']['sample_ratio']
+                sample_ratio=self.config['Model']['Pointcloud_Save']['sample_ratio'],
+                mask=mask_aligned_flat
             )
 
         self.save_camera_poses()

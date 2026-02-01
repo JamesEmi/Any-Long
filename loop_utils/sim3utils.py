@@ -180,7 +180,7 @@ def compute_alignment_error(point_map1, conf1, point_map2, conf2, conf_threshold
 
 
 
-def save_confident_pointcloud(points, colors, confs, output_path, conf_threshold, sample_ratio=1.0):
+def save_confident_pointcloud(points, colors, confs, output_path, conf_threshold, sample_ratio=1.0, mask=None):
     """
     Filter points based on confidence threshold and save as PLY file, with optional random sampling ratio.
 
@@ -213,7 +213,7 @@ def save_confident_pointcloud(points, colors, confs, output_path, conf_threshold
     print(f"Saved point cloud with {len(points)} points to {output_path}")
 
 
-def save_confident_pointcloud_batch(points, colors, confs, output_path, conf_threshold, sample_ratio=1.0, batch_size=1000000):
+def save_confident_pointcloud_batch(points, colors, confs, output_path, conf_threshold, sample_ratio=1.0, batch_size=1000000, mask=None):
     """
     - points: np.ndarray,  (b, H, W, 3) / (N, 3)
     - colors: np.ndarray,  (b, H, W, 3) / (N, 3)
@@ -236,7 +236,11 @@ def save_confident_pointcloud_batch(points, colors, confs, output_path, conf_thr
     total_valid = 0
     for i in range(b):
         cfs = confs[i].reshape(-1)
-        total_valid += np.count_nonzero((cfs >= conf_threshold) & (cfs > 1e-5))
+        valid_mask = (cfs >= conf_threshold) & (cfs > 1e-5)
+        if mask is not None:
+            msk = mask[i].reshape(-1).astype(bool) if mask.ndim > 1 else mask.astype(bool)
+            valid_mask = valid_mask & msk
+        total_valid += np.count_nonzero(valid_mask)
     
     num_samples = int(total_valid * sample_ratio) if sample_ratio < 1.0 else total_valid
     
@@ -255,9 +259,12 @@ def save_confident_pointcloud_batch(points, colors, confs, output_path, conf_thr
                 cls = colors[i].reshape(-1, 3).astype(np.uint8)
                 cfs = confs[i].reshape(-1).astype(np.float32)
                 
-                mask = (cfs >= conf_threshold) & (cfs > 1e-5)
-                valid_pts = pts[mask]
-                valid_cls = cls[mask]
+                valid_mask = (cfs >= conf_threshold) & (cfs > 1e-5)
+                if mask is not None:
+                    msk = mask[i].reshape(-1).astype(bool) if mask.ndim > 1 else mask.astype(bool)
+                    valid_mask = valid_mask & msk
+                valid_pts = pts[valid_mask]
+                valid_cls = cls[valid_mask]
                 
                 for j in range(0, len(valid_pts), batch_size):
                     batch_pts = valid_pts[j:j+batch_size]
@@ -274,9 +281,12 @@ def save_confident_pointcloud_batch(points, colors, confs, output_path, conf_thr
             cls = colors[i].reshape(-1, 3).astype(np.uint8)
             cfs = confs[i].reshape(-1).astype(np.float32)
             
-            mask = (cfs >= conf_threshold) & (cfs > 1e-5)
-            valid_pts = pts[mask]
-            valid_cls = cls[mask]
+            valid_mask = (cfs >= conf_threshold) & (cfs > 1e-5)
+            if mask is not None:
+                msk = mask[i].reshape(-1).astype(bool) if mask.ndim > 1 else mask.astype(bool)
+                valid_mask = valid_mask & msk
+            valid_pts = pts[valid_mask]
+            valid_cls = cls[valid_mask]
             n_valid = len(valid_pts)
             
             if count < num_samples:
