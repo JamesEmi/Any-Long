@@ -447,7 +447,8 @@ class VGGT_Long:
                     output_path=ply_path_first,
                     conf_threshold=(np.mean(confs_first) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
                         if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True) else -1.0),
-                    sample_ratio=self.config['Model']['Pointcloud_Save']['sample_ratio']
+                    sample_ratio=self.config['Model']['Pointcloud_Save']['sample_ratio'],
+                    geom_mask=chunk_data_first['mask']
                 )
 
 
@@ -465,7 +466,8 @@ class VGGT_Long:
                 output_path=ply_path,
                 conf_threshold=(np.mean(confs) * self.config['Model']['Pointcloud_Save']['conf_threshold_coef']
                     if self.config['Model']['Pointcloud_Save'].get('use_conf_filter', True) else -1.0),
-                sample_ratio=self.config['Model']['Pointcloud_Save']['sample_ratio']
+                sample_ratio=self.config['Model']['Pointcloud_Save']['sample_ratio'],
+                geom_mask=aligned_chunk_data['mask']
             )
 
         self.save_camera_poses()

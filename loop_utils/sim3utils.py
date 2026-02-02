@@ -212,7 +212,7 @@ def save_confident_pointcloud(points, colors, confs, output_path, conf_threshold
     print(f"Saved point cloud with {len(points)} points to {output_path}")
 
 
-def save_confident_pointcloud_batch(points, colors, confs, output_path, conf_threshold, sample_ratio=1.0, batch_size=1000000):
+def save_confident_pointcloud_batch(points, colors, confs, output_path, conf_threshold, sample_ratio=1.0, batch_size=1000000, geom_mask=None):
     """
     - points: np.ndarray,  (b, H, W, 3) / (N, 3)
     - colors: np.ndarray,  (b, H, W, 3) / (N, 3)
@@ -221,21 +221,27 @@ def save_confident_pointcloud_batch(points, colors, confs, output_path, conf_thr
     - conf_threshold: float,
     - sample_ratio: float (0 < sample_ratio <= 1.0)
     - batch_size: int
+    - geom_mask: np.ndarray, optional (b, H, W) / (N,) - geometry validity mask from MapAnything
     """
     if points.ndim == 2:
         b = 1
         points = points[np.newaxis, ...]
         colors = colors[np.newaxis, ...]
         confs = confs[np.newaxis, ...]
+        if geom_mask is not None:
+            geom_mask = geom_mask[np.newaxis, ...]
     elif points.ndim == 4:
         b = points.shape[0]
     else:
         raise ValueError("Unsupported points dimension. Must be 2 (N,3) or 4 (b,H,W,3)")
-    
+
     total_valid = 0
     for i in range(b):
         cfs = confs[i].reshape(-1)
-        total_valid += np.count_nonzero((cfs >= conf_threshold) & (cfs > 1e-5))
+        valid = (cfs >= conf_threshold) & (cfs > 1e-5)
+        if geom_mask is not None:
+            valid = valid & geom_mask[i].reshape(-1).astype(bool)
+        total_valid += np.count_nonzero(valid)
     
     num_samples = int(total_valid * sample_ratio) if sample_ratio < 1.0 else total_valid
     
@@ -253,16 +259,18 @@ def save_confident_pointcloud_batch(points, colors, confs, output_path, conf_thr
                 pts = points[i].reshape(-1, 3).astype(np.float32)
                 cls = colors[i].reshape(-1, 3).astype(np.uint8)
                 cfs = confs[i].reshape(-1).astype(np.float32)
-                
+
                 mask = (cfs >= conf_threshold) & (cfs > 1e-5)
+                if geom_mask is not None:
+                    mask = mask & geom_mask[i].reshape(-1).astype(bool)
                 valid_pts = pts[mask]
                 valid_cls = cls[mask]
-                
+
                 for j in range(0, len(valid_pts), batch_size):
                     batch_pts = valid_pts[j:j+batch_size]
                     batch_cls = valid_cls[j:j+batch_size]
                     write_ply_batch(f, batch_pts, batch_cls)
-    
+
     else:
         reservoir_pts = np.zeros((num_samples, 3), dtype=np.float32)
         reservoir_clr = np.zeros((num_samples, 3), dtype=np.uint8)
@@ -272,8 +280,10 @@ def save_confident_pointcloud_batch(points, colors, confs, output_path, conf_thr
             pts = points[i].reshape(-1, 3).astype(np.float32)
             cls = colors[i].reshape(-1, 3).astype(np.uint8)
             cfs = confs[i].reshape(-1).astype(np.float32)
-            
+
             mask = (cfs >= conf_threshold) & (cfs > 1e-5)
+            if geom_mask is not None:
+                mask = mask & geom_mask[i].reshape(-1).astype(bool)
             valid_pts = pts[mask]
             valid_cls = cls[mask]
             n_valid = len(valid_pts)

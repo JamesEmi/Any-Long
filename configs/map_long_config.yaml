@@ -3,11 +3,11 @@ inherit_from: "configs/base_config.yaml"
 Weights:
   model: 'Mapanything'  # Use MapAnything foundation model
   # Map: './weights/map_anything'  # Path to MapAnything weights
-  Map: 'facebook/map-anything-v1'    # Other options: 'facebook/map-anything-apache' or 'facebook/map-anything-v1' or 'facebook/map-anything-apache-v1'
+  Map: 'facebook/map-anything'    # Other options: 'facebook/map-anything-apache' or 'facebook/map-anything-v1' or 'facebook/map-anything-apache-v1'
 
 Model:
-  chunk_size: 150
-  overlap: 100
+  chunk_size: 60
+  overlap: 30
   loop_chunk_size: 20 # imgs of loop chunk = 2 * loop_chunk_size
   loop_enable: True
   useDBoW: False
