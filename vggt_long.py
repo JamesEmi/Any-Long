@@ -94,8 +94,9 @@ class LongSeqResult:
         self.all_camera_intrinsics = [] 
 
 class VGGT_Long:
-    def __init__(self, image_dir, save_dir, config):
+    def __init__(self, image_dir, save_dir, config, downsample=1):
         self.config = config
+        self.downsample = downsample
 
         self.chunk_size = self.config['Model']['chunk_size']
         self.overlap = self.config['Model']['overlap']
@@ -470,6 +471,10 @@ class VGGT_Long:
         # print(self.img_list)
         if len(self.img_list) == 0:
             raise ValueError(f"[DIR EMPTY] No images found in {self.img_dir}!")
+        if self.downsample > 1:
+            full_count = len(self.img_list)
+            self.img_list = self.img_list[::self.downsample]
+            print(f"Downsampled {full_count} -> {len(self.img_list)} images (factor {self.downsample})")
         print(f"Found {len(self.img_list)} images")
 
         if self.loop_enable:
@@ -649,24 +654,27 @@ if __name__ == '__main__':
                         help='Image path')
     parser.add_argument('--config', type=str, required=False, default='./configs/base_config.yaml',
                         help='config path')
+    parser.add_argument('--save_dir', type=str, default=None,
+                        help='Custom output directory (default: auto-generate under ./exps/)')
+    parser.add_argument('--downsample', type=int, default=1,
+                        help='Keep every Nth image (1 = no downsampling)')
     args = parser.parse_args()
 
     config = load_config(args.config)
 
     image_dir = args.image_dir
-    path = image_dir.split("/")
-    current_datetime = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    exp_dir = './exps'
 
-    save_dir = os.path.join(
-            exp_dir, image_dir.replace("/", "_"), current_datetime
-        )
-    
-    # save_dir = os.path.join(
-    #     exp_dir, path[-3] + "_" + path[-2] + "_" + path[-1], current_datetime
-    # )
+    if args.save_dir:
+        save_dir = args.save_dir
+    else:
+        path = image_dir.split("/")
+        current_datetime = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        exp_dir = './exps'
+        save_dir = os.path.join(
+                exp_dir, image_dir.replace("/", "_"), current_datetime
+            )
 
-    if not os.path.exists(save_dir): 
+    if not os.path.exists(save_dir):
         os.makedirs(save_dir)
         print(f'The exp will be saved under dir: {save_dir}')
         copy_file(args.config, save_dir)
@@ -674,7 +682,7 @@ if __name__ == '__main__':
     if config['Model']['align_method'] == 'numba':
         warmup_numba()
 
-    vggt_long = VGGT_Long(image_dir, save_dir, config)
+    vggt_long = VGGT_Long(image_dir, save_dir, config, downsample=args.downsample)
     vggt_long.run()
     vggt_long.close()
 
